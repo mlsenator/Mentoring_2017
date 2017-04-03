@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressionAndIQueryable", "ExpressionAndIQueryable\ExpressionAndIQueryable.csproj", "{CBFF2E58-917D-408B-9694-407E66DF1C41}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExpressionAndIQueryableTest", "ExpressionAndIQueryableTest\ExpressionAndIQueryableTest.csproj", "{2E0C3D84-C580-41B3-A5DD-94A03D321419}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CBFF2E58-917D-408B-9694-407E66DF1C41}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CBFF2E58-917D-408B-9694-407E66DF1C41}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CBFF2E58-917D-408B-9694-407E66DF1C41}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CBFF2E58-917D-408B-9694-407E66DF1C41}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2E0C3D84-C580-41B3-A5DD-94A03D321419}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2E0C3D84-C580-41B3-A5DD-94A03D321419}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2E0C3D84-C580-41B3-A5DD-94A03D321419}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2E0C3D84-C580-41B3-A5DD-94A03D321419}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
