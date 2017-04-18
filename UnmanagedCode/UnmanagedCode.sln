@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerManagerLibrary", "PowerManagerLibrary\PowerManagerLibrary.csproj", "{B5E3CCD8-5A2D-4C0F-808D-D412FE77187C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerManagerTest", "PowerManagerTest\PowerManagerTest.csproj", "{8216BC95-5A56-452F-A6D7-08B1910F454F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerManagerCOM", "PowerManagerCOM\PowerManagerCOM.csproj", "{1DAF7372-ECCF-4EEE-A32D-1952F425CCC9}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B5E3CCD8-5A2D-4C0F-808D-D412FE77187C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B5E3CCD8-5A2D-4C0F-808D-D412FE77187C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B5E3CCD8-5A2D-4C0F-808D-D412FE77187C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B5E3CCD8-5A2D-4C0F-808D-D412FE77187C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8216BC95-5A56-452F-A6D7-08B1910F454F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8216BC95-5A56-452F-A6D7-08B1910F454F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8216BC95-5A56-452F-A6D7-08B1910F454F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8216BC95-5A56-452F-A6D7-08B1910F454F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1DAF7372-ECCF-4EEE-A32D-1952F425CCC9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1DAF7372-ECCF-4EEE-A32D-1952F425CCC9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1DAF7372-ECCF-4EEE-A32D-1952F425CCC9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1DAF7372-ECCF-4EEE-A32D-1952F425CCC9}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
