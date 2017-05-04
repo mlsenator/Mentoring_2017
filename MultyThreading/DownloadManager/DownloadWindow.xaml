@@ -1,0 +1,17 @@
+﻿<Window x:Class="DownloadManager.DownloadWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:DownloadManager"
+        mc:Ignorable="d"
+        Title="DownloadWindow" Height="170.975" Width="300">
+    <Grid>
+        <TextBox x:Name="WebAddress" HorizontalAlignment="Left" Height="23" Margin="10,18,0,0" TextWrapping="Wrap" Text="https://www.w3.org/" VerticalAlignment="Top" Width="272" />
+        <Button x:Name="DownloadBtn" Content="Download" HorizontalAlignment="Left" Margin="100,80,0,0" VerticalAlignment="Top" Width="94" Height="44" Click="DownloadBtn_Click"/>
+        <Button x:Name="CancelBtn" Content="Cancel" HorizontalAlignment="Left" Margin="100,80,0,0" VerticalAlignment="Top" Width="94" Height="44" Visibility="Hidden" Click="CancelBtn_Click"/>
+        <ProgressBar x:Name="DownloadProgress" HorizontalAlignment="Left" Height="24" Margin="10,46,0,0" VerticalAlignment="Top" Width="272" Visibility="Hidden" />
+        <Label x:Name="StatusLabel" Content="Done" HorizontalAlignment="Left" Margin="10,46,0,0" VerticalAlignment="Top" Height="24" Width="85" Visibility="Hidden"/>
+
+    </Grid>
+</Window>
