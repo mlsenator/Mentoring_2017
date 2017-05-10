@@ -1,0 +1,1 @@
+.\ImageToPdfService\bin\Debug\ImageToPdfService.exe uninstall
