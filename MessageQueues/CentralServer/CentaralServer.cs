@@ -1,4 +1,6 @@
-﻿using System;
+﻿using PdfManager;
+using ServiceContract;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Messaging;
@@ -10,47 +12,43 @@ namespace CentralServer
 {
 	public class CentaralServer
 	{
-		const string ServerQueueName = @".\private$\CentralServerQueue";
-		const string MonitorQueueName = @".\private$\MonitorQueue";
-		const string ClientQueueName = @".\Private$\ClientQueue";
+		private string _outDirectory;
+        private string _settingsDirectory;
+        private int _lastTimeout;
 
-		private string outDirectory;
-		private FileSystemWatcher watcher;
-		private Task processFilesTask;
-		private Task monitoringTask;
-		private CancellationTokenSource tokenSource;
-		private ManualResetEvent stopWaitEvent;	
-		private int lastTimeout;
+        private PdfHelper _pdfHelper;
+        private FileSystemWatcher _watcher;
+
+		private Task _processFilesTask;
+		private Task _monitoringTask;
+		private CancellationTokenSource _tokenSource;
+		private ManualResetEvent _stopWaitEvent;	
 
 		public CentaralServer(string outDir)
 		{
-			outDirectory = outDir;
-			if (!Directory.Exists(outDirectory))
-				Directory.CreateDirectory(outDirectory);
+			_outDirectory = outDir;
+            _settingsDirectory = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, @"..\..\"));
+            _lastTimeout = 0;
+            _pdfHelper = new PdfHelper();
 
-			if (!MessageQueue.Exists(ServerQueueName))
-				MessageQueue.Create(ServerQueueName);
+            CheckDirectory(_outDirectory);
+            CheckMessageQueue(ServiceHelper.ServerQueueName);
+            CheckMessageQueue(ServiceHelper.MonitorQueueName);
+            CheckMessageQueue(ServiceHelper.ClientQueueName);
 
-			if (!MessageQueue.Exists(MonitorQueueName))
-				MessageQueue.Create(MonitorQueueName);
+			_watcher = new FileSystemWatcher(_settingsDirectory);
+			_watcher.Filter = "*.xml";
+			_watcher.Changed += Watcher_Changed;
 
-			if (!MessageQueue.Exists(ClientQueueName))
-				MessageQueue.Create(ClientQueueName);
-
-			string pathToXml = GetFullPath();
-			watcher = new FileSystemWatcher(pathToXml);
-			watcher.Filter = "*.xml";
-			watcher.Changed += Watcher_Changed;
-
-			stopWaitEvent = new ManualResetEvent(false);
-			tokenSource = new CancellationTokenSource();
-			processFilesTask = new Task(() => ProcessFiles(tokenSource.Token));
-			monitoringTask = new Task(() => MonitorService(tokenSource.Token));
+			_stopWaitEvent = new ManualResetEvent(false);
+			_tokenSource = new CancellationTokenSource();
+			_processFilesTask = new Task(() => ProcessFiles(_tokenSource.Token));
+			_monitoringTask = new Task(() => MonitorService(_tokenSource.Token));
 		}
 
 		public void ProcessFiles(CancellationToken token)
 		{
-			using (var serverQueue = new MessageQueue(ServerQueueName))
+			using (var serverQueue = new MessageQueue(ServiceHelper.ServerQueueName))
 			{
 				serverQueue.Formatter = new XmlMessageFormatter(new Type[] { typeof(PdfChunk) });
 				var chunks = new List<PdfChunk>();
@@ -68,9 +66,9 @@ namespace CentralServer
 							var chunk = (PdfChunk)body;
 							chunks.Add(chunk);
 
-							if (chunk.Pozition == chunk.Size)
+							if (chunk.Position == chunk.Size)
 							{
-								SaveFile(chunks);
+								_pdfHelper.SaveDocumentUsingChunks(_outDirectory, chunks);
 								chunks.Clear();
 							}
 						}
@@ -83,28 +81,15 @@ namespace CentralServer
 						serverQueue.Receive();
 					}
 
-					Thread.Sleep(1000);
+					Thread.Sleep(ServiceHelper.DefaultTimeOut);
 				}
 				while (!token.IsCancellationRequested);
 			}
 		}
 
-		public void SaveFile(List<PdfChunk> chunks)
-		{
-			var documentIndex = Directory.GetFiles(outDirectory).Length + 1;
-			var resultFile = Path.Combine(outDirectory, string.Format("result_{0}.pdf", documentIndex));
-			using (Stream destination = File.Create(Path.Combine(outDirectory, resultFile)))
-			{
-				foreach (var chunk in chunks)
-				{
-					destination.Write(chunk.Buffer.ToArray(), 0, chunk.BufferSize);
-				}
-			}
-		}
-
 		public void MonitorService(CancellationToken token)
 		{
-			using (var serverQueue = new MessageQueue(MonitorQueueName))
+			using (var serverQueue = new MessageQueue(ServiceHelper.MonitorQueueName))
 			{
 				serverQueue.Formatter = new XmlMessageFormatter(new Type[] { typeof(Settings) });
 
@@ -112,7 +97,7 @@ namespace CentralServer
 				{
 					var asyncReceive = serverQueue.BeginPeek();
 
-					if (WaitHandle.WaitAny(new WaitHandle[] { stopWaitEvent, asyncReceive.AsyncWaitHandle }) == 0)
+					if (WaitHandle.WaitAny(new WaitHandle[] { _stopWaitEvent, asyncReceive.AsyncWaitHandle }) == 0)
 					{
 						break;
 					}
@@ -120,7 +105,7 @@ namespace CentralServer
 					var message = serverQueue.EndPeek(asyncReceive);
 					serverQueue.Receive();
 					var settings = (Settings)message.Body;
-					lastTimeout = settings.Timeout;
+					_lastTimeout = settings.Timeout;
 					WriteSettings(settings);
 				}
 			}
@@ -128,73 +113,82 @@ namespace CentralServer
 
 		public void WriteSettings(Settings settings)
 		{
-			string path = GetFullPath();
-			var fullPath = Path.Combine(path, "setting.csv");
+			var fullPath = Path.Combine(_settingsDirectory, "setting.csv");
 
 			using (StreamWriter sw = File.AppendText(fullPath))
 			{
-				var line = string.Format("{0},{1},{2}s", settings.Date, settings.Status, settings.Timeout);
+				var line = string.Format("{0},{1},{2}", settings.Date, settings.Status, settings.Timeout);
 				sw.WriteLine(line);
 			}
 		}
 
 		private void Watcher_Changed(object sender, FileSystemEventArgs e)
 		{
-			string path = GetFullPath();
-			var fullPath = Path.Combine(path, "timeout.xml");
-			if (TryOpen(fullPath, 3))
+			var fullPath = Path.Combine(_settingsDirectory, "timeout.xml");
+			if (TryToOpen(fullPath, 3))
 			{
 				XDocument doc = XDocument.Load(fullPath);
 				var timeout = int.Parse(doc.Root.Value);
-				if (lastTimeout != timeout)
+				if (_lastTimeout != timeout)
 				{
-					using (var clientQueue = new MessageQueue(ClientQueueName))
+					using (var clientQueue = new MessageQueue(ServiceHelper.ClientQueueName))
 					{
 						clientQueue.Send(timeout);
+                        _lastTimeout = timeout;
 					}
 				}
 			}		
 		}
 
-		private string GetFullPath()
-		{
-			var currentDir = AppDomain.CurrentDomain.BaseDirectory;
-			return Path.GetFullPath(Path.Combine(currentDir, @"..\..\"));
-		}
-
 		public void Start()
 		{
-			processFilesTask.Start();
-			monitoringTask.Start();
-			watcher.EnableRaisingEvents = true;
+			_processFilesTask.Start();
+			_monitoringTask.Start();
+			_watcher.EnableRaisingEvents = true;
 		}
 
 		public void Stop()
 		{
-			watcher.EnableRaisingEvents = false;
-			tokenSource.Cancel();
-			stopWaitEvent.Set();
-			Task.WaitAll(processFilesTask, monitoringTask);
+			_watcher.EnableRaisingEvents = false;
+			_tokenSource.Cancel();
+			_stopWaitEvent.Set();
+			Task.WaitAll(_processFilesTask, _monitoringTask);
 		}
 
-		private bool TryOpen(string fileName, int tryCount)
-		{
-			for (int i = 0; i < tryCount; i++)
-			{
-				try
-				{
-					var file = File.Open(fileName, FileMode.Open, FileAccess.Read, FileShare.None);
-					file.Close();
+        private bool TryToOpen(string filePath, int tryCount)
+        {
+            for (int i = 0; i < tryCount; i++)
+            {
+                try
+                {
+                    var file = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.None);
+                    file.Close();
 
-					return true;
-				}
-				catch (IOException)
-				{
-					Thread.Sleep(5000);
-				}
-			}
+                    return true;
+                }
+                catch (IOException)
+                {
+                    Thread.Sleep(5000);
+                }
+            }
 
-			return false;
-		}
-	}
+            return false;
+        }
+
+        private void CheckDirectory(string path)
+        {
+            if (!Directory.Exists(path))
+            {
+                Directory.CreateDirectory(path);
+            }
+        }
+
+        private void CheckMessageQueue(string name)
+        {
+            if (!MessageQueue.Exists(name))
+            {
+                MessageQueue.Create(name);
+            }
+        }
+    }
 }

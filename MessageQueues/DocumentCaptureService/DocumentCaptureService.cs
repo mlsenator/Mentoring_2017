@@ -1,6 +1,7 @@
-﻿using CentralServer;
-using MigraDoc.DocumentObjectModel;
+﻿using MigraDoc.DocumentObjectModel;
 using MigraDoc.Rendering;
+using PdfManager;
+using ServiceContract;
 using System;
 using System.IO;
 using System.Linq;
@@ -13,285 +14,237 @@ namespace DocumentСaptureService
 {
 	public class DocumentCaptureService
 	{
-		const string ServerQueueName = @".\private$\CentralServerQueue";
-		const string MonitorQueueName = @".\private$\MonitorQueue";
-		const string ClientQueueName = @".\Private$\ClientQueue";
+        private string _inDirectory;
+        private string _processedImagesDirectory;
+        private string _unprocessedImagesDirectory;
 
-		private string inDirectory;
-		private string tempDirectory;
-		private FileSystemWatcher watcher;
-		private Task processFilesTask;
-		private Task sendSettingsTask;
-		private Task controlTask;
-		private CancellationTokenSource tokenSource;
-		private AutoResetEvent newFileEvent;
-		private ManualResetEvent stopWaitEvent;
-		private Document document;
-		private Section section;
-		private PdfDocumentRenderer pdfRender;
-		private int timeout;
-		private string status;
+        private PdfHelper _pdfHelper;
+        private FileSystemWatcher _watcher;
+		private Task _processFilesTask;
+		private Task _sendSettingsTask;
+		private Task _controlTask;
+		private AutoResetEvent _newFileAdded;
+        private ManualResetEvent _workStopped;
 
-		public DocumentCaptureService(string inDir, string tempDir)
+        private int _currentImageIndex = -1;
+        private int _timeout;
+		private Status _status;
+
+        public DocumentCaptureService(string inDirectory)
 		{
-			inDirectory = inDir;
-			tempDirectory = tempDir;
+            _inDirectory = inDirectory;
+            _processedImagesDirectory = Path.Combine(_inDirectory, "ProcessedImages");
+            _unprocessedImagesDirectory = Path.Combine(_inDirectory, "UnprocessedImages");
 
-			if (!Directory.Exists(inDirectory))
-				Directory.CreateDirectory(inDirectory);
+            CheckDirectory(inDirectory);
+            CheckDirectory(_processedImagesDirectory);
+            CheckDirectory(_unprocessedImagesDirectory);
 
-			if (!Directory.Exists(tempDirectory))
-				Directory.CreateDirectory(tempDirectory);
+            CheckMessageQueue(ServiceHelper.ServerQueueName);
+            CheckMessageQueue(ServiceHelper.MonitorQueueName);
+            CheckMessageQueue(ServiceHelper.ClientQueueName);
 
-			if (!MessageQueue.Exists(ServerQueueName))
-				MessageQueue.Create(ServerQueueName);
+			_watcher = new FileSystemWatcher(_inDirectory);
+			_watcher.Created += Watcher_Created;
+            _pdfHelper = new PdfHelper();
 
-			if (!MessageQueue.Exists(MonitorQueueName))
-				MessageQueue.Create(MonitorQueueName);
+			_timeout = ServiceHelper.DefaultTimeOut;
+			_status = Status.Waiting;
 
-			if (!MessageQueue.Exists(ClientQueueName))
-				MessageQueue.Create(ClientQueueName);
+			_workStopped = new ManualResetEvent(false);
+			_newFileAdded = new AutoResetEvent(false);
 
-			watcher = new FileSystemWatcher(inDirectory);
-			watcher.Created += Watcher_Created;
-
-			timeout = 5000;
-			status = "Waiting";
-			stopWaitEvent = new ManualResetEvent(false);
-			tokenSource = new CancellationTokenSource();
-			newFileEvent = new AutoResetEvent(false);
-			processFilesTask = new Task(() => ProcessFiles(tokenSource.Token));
-			sendSettingsTask = new Task(() => SendSettings(tokenSource.Token));
-			controlTask = new Task(() => ControlService(tokenSource.Token));
+			_processFilesTask = new Task(() => ProcessFiles());
+			_sendSettingsTask = new Task(() => SendSettings());
+			_controlTask = new Task(() => ControlService());
 		}
 
-		public void ProcessFiles(CancellationToken token)
+		public void ProcessFiles()
 		{
-			var currentImageIndex = -1;
-			var nextPageWaiting = false;
-			CreateNewDocument();
+            _pdfHelper.CreateNewDocument();
 
-			do
+            do
 			{
-				status = "Process";
-				foreach (var file in Directory.EnumerateFiles(inDirectory).OrderBy(f => f))
-				{
-					var fileName = Path.GetFileName(file);
+				_status = Status.Processing;
 
-					if (IsValidFormat(fileName))
-					{
-						var imageIndex = GetIndex(fileName);
-						if (imageIndex != currentImageIndex + 1 && currentImageIndex != -1 && nextPageWaiting)
-						{
-							SendDocument();
-							CreateNewDocument();
-							nextPageWaiting = false;
-						}
+                foreach (var filePath in Directory.EnumerateFiles(_inDirectory).OrderBy(name => name))
+                {
+                    if (IsValidFormat(filePath) && TryToOpen(filePath, 3))
+                    {
+                        var newFilePath = Path.Combine(_processedImagesDirectory, Path.GetFileName(filePath));
+                        AddImageToDocument(newFilePath);
+                        MoveFile(filePath, newFilePath);
+                    }
+                    else
+                    {
+                        TrySendDocument();
+                    }
+                }
 
-						if (TryOpen(file, 3))
-						{
-							var outFile = Path.Combine(tempDirectory, fileName);
-							if (File.Exists(outFile))
-							{
-								File.Delete(file);
-							}
-							else
-							{
-								File.Move(file, outFile);
-							}
+                if (!_newFileAdded.WaitOne(_timeout))
+                {
+                    TrySendDocument();
+                    _status = Status.Waiting;
+                }
+            }
+            while (WaitHandle.WaitAny(new WaitHandle[] { _workStopped, _newFileAdded }) != 0);
+        }
 
-							AddImageToDocument(outFile);
-							currentImageIndex = imageIndex;
-							nextPageWaiting = true;
-						}
-					}
-					else
-					{
-						if (TryOpen(file, 3))
-						{
-							File.Delete(file);
-						}
-					}
-				}
-
-				status = "Waiting";
-				if (!newFileEvent.WaitOne(timeout) && nextPageWaiting)
-				{
-					SendDocument();
-					CreateNewDocument();
-					nextPageWaiting = false;
-				}
-
-				if (token.IsCancellationRequested)
-				{
-					if (nextPageWaiting)
-					{
-						SendDocument();
-					}
-
-					foreach (var file in Directory.EnumerateFiles(tempDirectory))
-					{
-						if (TryOpen(file, 3))
-						{
-							File.Delete(file);
-						}
-					}
-				}
-			}
-			while (!token.IsCancellationRequested);
-		}
-
-		private void CreateNewDocument()
+		public void SendSettings()
 		{
-			document = new Document();
-			section = document.AddSection();
-			pdfRender = new PdfDocumentRenderer();
-			pdfRender.Document = document;
-		}
-
-		public void SendSettings(CancellationToken token)
-		{
-			while (!token.IsCancellationRequested)
+			while (!_workStopped.WaitOne(_timeout))
 			{
 				var settings = new Settings
 				{
 					Date = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-					Status = status,
-					Timeout = timeout
+					Status = _status,
+					Timeout = _timeout
 				};
 
-				using (var serverQueue = new MessageQueue(MonitorQueueName))
+				using (var serverQueue = new MessageQueue(ServiceHelper.MonitorQueueName))
 				{
 					var message = new Message(settings);
 					serverQueue.Send(message);
 				}
-
-				Thread.Sleep(10000);
 			}
 		}
 
-		public void ControlService(CancellationToken token)
+		public void ControlService()
 		{
-			using (var clientQueue = new MessageQueue(ClientQueueName))
+			using (var clientQueue = new MessageQueue(ServiceHelper.ClientQueueName))
 			{
 				clientQueue.Formatter = new XmlMessageFormatter(new Type[] { typeof(int) });
 
-				while (!token.IsCancellationRequested)
+				while (!_workStopped.WaitOne(_timeout))
 				{
 					var asyncReceive = clientQueue.BeginPeek();
 
-					if (WaitHandle.WaitAny(new WaitHandle[] { stopWaitEvent, asyncReceive.AsyncWaitHandle }) == 0)
+					if (WaitHandle.WaitAny(new WaitHandle[] { _workStopped, asyncReceive.AsyncWaitHandle }) == 0)
 					{
 						break;
 					}
 
 					var message = clientQueue.EndPeek(asyncReceive);
 					clientQueue.Receive();
-					timeout = (int)message.Body;
+					_timeout = (int)message.Body;
 				}
 			}
-		}
-
-		private void SendDocument()
-		{
-			pdfRender.RenderDocument();
-			var pageCount = pdfRender.PdfDocument.PageCount - 1;
-			pdfRender.PdfDocument.Pages.RemoveAt(pageCount);
-			var pdfDocument = pdfRender.PdfDocument;
-			var buffer = new byte[1024];
-			int bytesRead;
-
-			using (var ms = new MemoryStream())
-			{
-				pdfDocument.Save(ms, false);
-				ms.Position = 0;
-				var position = 0;
-				var size = (int)Math.Ceiling((double)(ms.Length) / 1024) - 1;
-
-				while ((bytesRead = ms.Read(buffer, 0, buffer.Length)) > 0)
-				{
-					var pdfChunk = new PdfChunk
-					{
-						Pozition = position,
-						Size = size,
-						Buffer = buffer.ToList(),
-						BufferSize = bytesRead
-					};
-
-					position++;
-
-					using (var serverQueue = new MessageQueue(ServerQueueName, QueueAccessMode.Send))
-					{
-						var message = new Message(pdfChunk);
-						serverQueue.Send(message);
-					}
-				}
-			}
-		}
-
-		private void AddImageToDocument(string file)
-		{
-			var image = section.AddImage(file);
-
-			image.Height = document.DefaultPageSetup.PageHeight;
-			image.Width = document.DefaultPageSetup.PageWidth;
-			image.ScaleHeight = 0.75;
-			image.ScaleWidth = 0.75;
-
-			section.AddPageBreak();
-		}
-
-		private bool IsValidFormat(string fileName)
-		{
-			return Regex.IsMatch(fileName, @"^img_[0-9]{3}.(jpg|png|jpeg)$");
-		}
-
-		private int GetIndex(string fileName)
-		{
-			var match = Regex.Match(fileName, @"[0-9]{3}");
-
-			return match.Success ? int.Parse(match.Value) : -1;
 		}
 
 		private void Watcher_Created(object sender, FileSystemEventArgs e)
 		{
-			newFileEvent.Set();
+			_newFileAdded.Set();
 		}
 
 		public void Start()
 		{
-			processFilesTask.Start();
-			sendSettingsTask.Start();
-			controlTask.Start();
-			watcher.EnableRaisingEvents = true;
+			_processFilesTask.Start();
+			_sendSettingsTask.Start();
+			_controlTask.Start();
+			_watcher.EnableRaisingEvents = true;
 		}
 
 		public void Stop()
 		{
-			watcher.EnableRaisingEvents = false;
-			tokenSource.Cancel();
-			stopWaitEvent.Set();
-			Task.WaitAll(processFilesTask, sendSettingsTask, controlTask);
+			_watcher.EnableRaisingEvents = false;
+            _workStopped.Set();
+			Task.WaitAll(_processFilesTask, _sendSettingsTask, _controlTask);
 		}
 
-		private bool TryOpen(string fileName, int tryCount)
-		{
-			for (int i = 0; i < tryCount; i++)
-			{
-				try
-				{
-					var file = File.Open(fileName, FileMode.Open, FileAccess.Read, FileShare.None);
-					file.Close();
+        private bool TryToOpen(string filePath, int tryCount)
+        {
+            for (int i = 0; i < tryCount; i++)
+            {
+                try
+                {
+                    var file = File.Open(filePath, FileMode.Open, FileAccess.Read, FileShare.None);
+                    file.Close();
 
-					return true;
-				}
-				catch (IOException)
-				{
-					Thread.Sleep(5000);
-				}
-			}
+                    return true;
+                }
+                catch (IOException)
+                {
+                    Thread.Sleep(5000);
+                }
+            }
 
-			return false;
-		}
-	}
+            return false;
+        }
+
+        private void CheckDirectory(string path)
+        {
+            if (!Directory.Exists(path))
+            {
+                Directory.CreateDirectory(path);
+            }
+        }
+
+        private void CheckMessageQueue(string name)
+        {
+            if (!MessageQueue.Exists(name))
+            {
+                MessageQueue.Create(name);
+            }
+        }
+
+        private static void MoveFile(string sourceFilePath, string newFilePath)
+        {
+            if (File.Exists(newFilePath))
+            {
+                File.Delete(newFilePath);
+            }
+
+            File.Move(sourceFilePath, newFilePath);
+        }
+
+        private bool IsValidFormat(string fileName)
+        {
+            var pattern = @"img_\d+[.](?:png|jpeg|jpg)";
+            var regex = new Regex(pattern, RegexOptions.IgnoreCase);
+
+            return regex.IsMatch(fileName);
+        }
+
+        private void AddImageToDocument(string filePath)
+        {
+            var pattern = @"\d+";
+            var regex = new Regex(pattern, RegexOptions.IgnoreCase);
+            var imageIndex = int.Parse(regex.Match(Path.GetFileName(filePath)).ToString());
+
+            if (_currentImageIndex >= 0 && imageIndex != _currentImageIndex + 1)
+            {
+                TrySendDocument();
+            }
+
+            _pdfHelper.AddImage(filePath);
+            _currentImageIndex = imageIndex;
+        }
+
+        public void TrySendDocument()
+        {
+            if (_pdfHelper.Images.Any())
+            {
+                try
+                {
+                    var pdfChunks = _pdfHelper.GetPdfChunks(ServiceHelper.ChunkSize);
+                    using (var serverQueue = new MessageQueue(ServiceHelper.ServerQueueName, QueueAccessMode.Send))
+                    {
+                        foreach (var chunk in pdfChunks)
+                        {
+                            var message = new Message(chunk);
+                            serverQueue.Send(message);
+                        }
+                    }
+                }
+                catch (Exception)
+                {
+                    _pdfHelper.Images.ForEach(img => MoveFile(img, Path.Combine(_unprocessedImagesDirectory, Path.GetFileName(img))));
+                }
+                finally
+                {
+                    _pdfHelper.CreateNewDocument();
+                }
+            }
+        }
+    }
 }

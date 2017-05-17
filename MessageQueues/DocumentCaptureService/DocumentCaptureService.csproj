@@ -86,9 +86,13 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\CentralServer\CentralServer.csproj">
-      <Project>{a47bc5d2-2294-42d4-b54b-13bfb3fd2afc}</Project>
-      <Name>CentralServer</Name>
+    <ProjectReference Include="..\PdfManager\PdfManager.csproj">
+      <Project>{c72b18be-fed6-4feb-b7c3-297cb3efa2c5}</Project>
+      <Name>PdfManager</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\ServiceContract\ServiceContract.csproj">
+      <Project>{bb8adc52-c192-431e-bbfc-63a7e732af71}</Project>
+      <Name>ServiceContract</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
