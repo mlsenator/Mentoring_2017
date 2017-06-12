@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.24720.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleCalculator", "SimpleCalculator\SimpleCalculator.csproj", "{AE54B979-738E-469A-8012-5646F52EEA80}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Logger", "Logger\Logger.csproj", "{80069BBC-81D5-4073-8A81-CAC91222317D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{AE54B979-738E-469A-8012-5646F52EEA80}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AE54B979-738E-469A-8012-5646F52EEA80}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AE54B979-738E-469A-8012-5646F52EEA80}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AE54B979-738E-469A-8012-5646F52EEA80}.Release|Any CPU.Build.0 = Release|Any CPU
+		{80069BBC-81D5-4073-8A81-CAC91222317D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{80069BBC-81D5-4073-8A81-CAC91222317D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{80069BBC-81D5-4073-8A81-CAC91222317D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{80069BBC-81D5-4073-8A81-CAC91222317D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
